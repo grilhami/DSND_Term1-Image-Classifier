@@ -154,17 +154,17 @@ for e in range(EPOCHS):
               "Validation accuracy {:.2f}".format(accuracy/len(valloader)))
         
 # TODO: Save the checkpoint 
-model.classes = cat_to_name
-model.class_to_idx = train_datasets.classes
-model.optimizer_state = optimizer.state_dict()
-model.epochs = EPOCHS
-model.model_name = MODEL
-model.hidden_units_1 = N_HIDDEN_1
-model.hidden_units_2 = N_HIDDEN_2
-
-# TODO: Write a function that loads a checkpoint and rebuilds the model
-torch.save(model.cpu(), 'model_checkpoint_cpu.pth')
-torch.save(model.cpu().state_dict(), 'model_state_dict_checkpoint_cpu.pth')
-torch.save(model.cuda(), 'model_checkpoint_gpu.pth')
-torch.save(model.cuda().state_dict(), 'model_state_dict_checkpoint_gpu.pth')
+model.cpu()
+model.class_to_idx = train_datasets.class_to_idx
+checkpoint_cpu = {
+    'batch_size': trainloader.batch_size,
+    'input_size': model.fc.fc1.in_features, 
+    'output_size': len(train_datasets.class_to_idx), 
+    'hidden_layers_1': model.fc.fc1.out_features,
+    'hidden_layers_2': model.fc.fc2.out_features,
+    'state_dict': model.fc.state_dict(),
+    'class_to_idx': model.class_to_idx,
+    'optim_state_dict': optimizer.state_dict(),
+    'epochs': EPOCHS}
+torch.save(checkpoint_cpu, 'checkpoint_resnet.pth')
 

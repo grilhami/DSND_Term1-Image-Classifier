@@ -27,6 +27,28 @@ torch.cuda.empty_cache()
 with open(args.category_names, 'r') as f:
     CATEGORY_NAMES = json.load(f)
     
+def load_model(file_path):
+    model = torchvision.models.resnet152(pretrained=True)
+    checkpoint = torch.load(file_path)
+    
+    for param in model.parameters():
+        param.requires_grad = False
+        
+    classifier = nn.Sequential(OrderedDict([('fc1', nn.Linear(checkpoint["input_size"], checkpoint["hidden_layers_1"])),
+                                            ('relu', nn.ReLU()),
+                                            ('dropout', nn.Dropout(p=0.2)),
+                                            ('fc2', nn.Linear(checkpoint["hidden_layers_1"], checkpoint["hidden_layers_2"])),
+                                            ('relu', nn.ReLU()),
+                                            ('bn', nn.BatchNorm1d(checkpoint["hidden_layers_2"])),
+                                            ('dropout', nn.Dropout(p=0.2)),
+                                            ('fc3', nn.Linear(checkpoint["hidden_layers_2"], checkpoint["output_size"])),
+                                            ('output', nn.LogSoftmax(dim=1))]))
+    model.fc = classifier
+    model.fc.state_dict = checkpoint["state_dict"]
+    
+    model.class_to_idx = checkpoint["class_to_idx"]
+    return model
+    
 # Create function for processing images before inference
 def process_image(image, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
     ''' Scales, crops, and normalizes a PIL image for a PyTorch model,
@@ -71,13 +93,19 @@ def predict(image_paths, load_model, device, topk=5, return_pred=1):
         output = model(image)
         
     ps = torch.exp(output)
-    probs, classes = ps.topk(topk, dim=1)
-    return probs[return_pred], classes[return_pred]
+    probs, classes = ps.topk(5, dim=1)
+    
+    idx_to_class = { v : k for k,v in model.class_to_idx.items()}
+    probs = probs[return_pred].cpu().numpy().tolist()
+    classes = classes[return_pred].cpu().numpy().tolist()
+    
+    return probs, [idx_to_class[x] for x in classes]
+    # TODO: Implement the code to predict the class from an image 
 
 if __name__ == "__main__":
     # Load model
-    print("Loading midel...")
-    model = torch.load("model_checkpoint_cpu.pth")
+    print("Loading model...")
+    model = load_model("checkpoint_resnet.pth")
     print("###DONE###", end="\n\n")
     # Get images names
     print("Getting images...")
@@ -87,7 +115,7 @@ if __name__ == "__main__":
     # Get predictions
     print("Predicting...")
     probs, classes = predict(images, model, DEVICE, TOP_K, return_pred=TOP_K)
-    labels = [CATEGORY_NAMES[str(idx)] for idx in classes.cpu().numpy()]
+    labels = [CATEGORY_NAMES[idx] for idx in classes]
     
     import pandas as pd
     data = pd.DataFrame({'probability': probs, 'class': classes, 'label': labels})
